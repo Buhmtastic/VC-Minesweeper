@@ -4,9 +4,9 @@ import time
 
 # --- Constants ---
 DIFFICULTY_LEVELS = {
-    "Easy": {"size": (9, 9), "mines": 10},
-    "Normal": {"size": (16, 16), "mines": 40},
-    "Hard": {"size": (30, 16), "mines": 99}
+    "Easy": {"size": (12, 9), "mines": 10},
+    "Normal": {"size": (18, 14), "mines": 40},
+    "Hard": {"size": (32, 18), "mines": 99}
 }
 current_difficulty = "Easy"
 
@@ -14,11 +14,15 @@ GRID_WIDTH = DIFFICULTY_LEVELS[current_difficulty]["size"][0]
 GRID_HEIGHT = DIFFICULTY_LEVELS[current_difficulty]["size"][1]
 NUM_MINES = DIFFICULTY_LEVELS[current_difficulty]["mines"]
 TILE_SIZE = 30
-PANEL_HEIGHT = 60
+
+# New Panel Dimensions for frame-like UI
+PANEL_TOP_HEIGHT = 60
+PANEL_SIDES_WIDTH = 40
+PANEL_BOTTOM_HEIGHT = 60 # Increased for buttons
 
 # Screen dimensions
-SCREEN_WIDTH = GRID_WIDTH * TILE_SIZE
-SCREEN_HEIGHT = GRID_HEIGHT * TILE_SIZE + PANEL_HEIGHT
+SCREEN_WIDTH = GRID_WIDTH * TILE_SIZE + 2 * PANEL_SIDES_WIDTH
+SCREEN_HEIGHT = GRID_HEIGHT * TILE_SIZE + PANEL_TOP_HEIGHT + PANEL_BOTTOM_HEIGHT
 
 # Colors
 BLACK = (0, 0, 0)
@@ -27,6 +31,20 @@ GRAY = (192, 192, 192)
 LIGHT_GRAY = (211, 211, 211)
 RED = (255, 0, 0)
 BLUE = (0, 0, 255)
+
+# Global variables for buttons
+main_menu_button_rect = None
+restart_button_rect = None
+
+def update_button_positions():
+    """Calculates the positions of the top panel buttons."""
+    global main_menu_button_rect, restart_button_rect
+    total_button_width = 210  # 100 for menu + 10 for space + 100 for restart
+    start_x = SCREEN_WIDTH // 2 - total_button_width // 2
+    button_y = PANEL_TOP_HEIGHT + GRID_HEIGHT * TILE_SIZE + (PANEL_BOTTOM_HEIGHT - 40) // 2 # 40 is button height
+    main_menu_button_rect = pygame.Rect(start_x, button_y, 100, 40)
+    restart_button_rect = pygame.Rect(start_x + 110, button_y, 100, 40)
+
 
 def create_board():
     """Creates the game board."""
@@ -59,58 +77,99 @@ def calculate_neighbor_mines(board):
     return board
 
 def reveal_tile(board, x, y):
-    """Reveals a tile and recursively reveals neighbors if it's empty."""
+    """Reveals a tile and iteratively reveals neighbors if it's empty."""
     if not (0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT):
         return
 
-    tile = board[y][x]
-    if tile['is_revealed'] or tile['is_flagged']:
-        return
+    stack = [(x, y)]
 
-    tile['is_revealed'] = True
+    while stack:
+        x, y = stack.pop()
 
-    if tile['is_mine']:
-        return
+        tile = board[y][x]
+        if tile['is_revealed'] or tile['is_flagged']:
+            continue
 
-    if tile['neighbor_mines'] == 0:
-        for i in range(-1, 2):
-            for j in range(-1, 2):
-                if i == 0 and j == 0:
-                    continue
-                reveal_tile(board, x + j, y + i)
+        tile['is_revealed'] = True
+
+        if tile['is_mine']:
+            continue
+
+        if tile['neighbor_mines'] == 0:
+            for i in range(-1, 2):
+                for j in range(-1, 2):
+                    if i == 0 and j == 0:
+                        continue
+                    nx, ny = x + j, y + i
+                    if 0 <= nx < GRID_WIDTH and 0 <= ny < GRID_HEIGHT:
+                        if not board[ny][nx]['is_revealed']:
+                            stack.append((nx, ny))
 
 def draw_board(screen, font, board):
     """Draws the game board."""
-    board_start_x = (SCREEN_WIDTH - GRID_WIDTH * TILE_SIZE) // 2
-    board_start_y = (SCREEN_HEIGHT - PANEL_HEIGHT - GRID_HEIGHT * TILE_SIZE) // 2 + PANEL_HEIGHT
+    board_start_x = PANEL_SIDES_WIDTH
+    board_start_y = PANEL_TOP_HEIGHT
 
     for y in range(GRID_HEIGHT):
         for x in range(GRID_WIDTH):
             rect = pygame.Rect(board_start_x + x * TILE_SIZE, board_start_y + y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+            
+            # Draw the tile background
             if board[y][x]['is_revealed']:
                 pygame.draw.rect(screen, LIGHT_GRAY, rect)
                 if board[y][x]['is_mine']:
-                    pygame.draw.circle(screen, RED, rect.center, TILE_SIZE // 3)
+                    pygame.draw.ellipse(screen, RED, rect)
                 elif board[y][x]['neighbor_mines'] > 0:
                     text = font.render(str(board[y][x]['neighbor_mines']), True, BLACK)
                     screen.blit(text, (rect.x + (TILE_SIZE - text.get_width()) // 2, rect.y + (TILE_SIZE - text.get_height()) // 2))
             else:
+                # Draw a 3D-like button for unrevealed tiles
                 pygame.draw.rect(screen, GRAY, rect)
+                pygame.draw.line(screen, WHITE, (rect.left, rect.top), (rect.right - 1, rect.top), 2)
+                pygame.draw.line(screen, WHITE, (rect.left, rect.top), (rect.left, rect.bottom - 1), 2)
+                pygame.draw.line(screen, BLACK, (rect.left, rect.bottom - 1), (rect.right - 1, rect.bottom - 1), 2)
+                pygame.draw.line(screen, BLACK, (rect.right - 1, rect.top), (rect.right - 1, rect.bottom - 1), 2)
+
                 if board[y][x]['is_flagged']:
                     flag_text = font.render('F', True, BLUE)
                     screen.blit(flag_text, (rect.x + (TILE_SIZE - flag_text.get_width()) // 2, rect.y + (TILE_SIZE - flag_text.get_height()) // 2))
 
-            pygame.draw.rect(screen, BLACK, rect, 1)
+    # Draw grid lines
+    for i in range(GRID_WIDTH + 1):
+        pygame.draw.line(screen, BLACK, (board_start_x + i * TILE_SIZE, board_start_y), (board_start_x + i * TILE_SIZE, board_start_y + GRID_HEIGHT * TILE_SIZE))
+    for i in range(GRID_HEIGHT + 1):
+        pygame.draw.line(screen, BLACK, (board_start_x, board_start_y + i * TILE_SIZE), (board_start_x + GRID_WIDTH * TILE_SIZE, board_start_y + i * TILE_SIZE))
 
-def draw_panel(screen, font, elapsed_time, mines_left):
-    """Draws the top panel with timer and mine counter."""
-    pygame.draw.rect(screen, GRAY, (0, 0, SCREEN_WIDTH, PANEL_HEIGHT))
+def draw_ui_frame(screen, font, elapsed_time, mines_left):
+    """Draws the UI frame around the game board."""
+    # Draw top panel
+    pygame.draw.rect(screen, GRAY, (0, 0, SCREEN_WIDTH, PANEL_TOP_HEIGHT))
+    # Draw bottom panel
+    pygame.draw.rect(screen, GRAY, (0, PANEL_TOP_HEIGHT + GRID_HEIGHT * TILE_SIZE, SCREEN_WIDTH, PANEL_BOTTOM_HEIGHT))
+    # Draw left panel
+    pygame.draw.rect(screen, GRAY, (0, PANEL_TOP_HEIGHT, PANEL_SIDES_WIDTH, GRID_HEIGHT * TILE_SIZE))
+    # Draw right panel
+    pygame.draw.rect(screen, GRAY, (PANEL_SIDES_WIDTH + GRID_WIDTH * TILE_SIZE, PANEL_TOP_HEIGHT, PANEL_SIDES_WIDTH, GRID_HEIGHT * TILE_SIZE))
 
+    # Draw timer in top panel
     timer_text = font.render(f"Time: {int(elapsed_time)}", True, BLACK)
     screen.blit(timer_text, (10, 10))
 
+    # Draw mines left in top panel
     mines_text = font.render(f"Mines: {mines_left}", True, BLACK)
     screen.blit(mines_text, (SCREEN_WIDTH - mines_text.get_width() - 10, 10))
+
+    # Draw main menu button in bottom panel
+    pygame.draw.rect(screen, LIGHT_GRAY, main_menu_button_rect)
+    main_menu_text = font.render("Menu", True, BLACK)
+    text_rect = main_menu_text.get_rect(center=main_menu_button_rect.center)
+    screen.blit(main_menu_text, text_rect)
+
+    # Draw restart button in bottom panel
+    pygame.draw.rect(screen, LIGHT_GRAY, restart_button_rect)
+    restart_text = font.render("Restart", True, BLACK)
+    text_rect = restart_text.get_rect(center=restart_button_rect.center)
+    screen.blit(restart_text, text_rect)
 
 def check_game_clear(board):
     """Checks if all non-mine tiles have been revealed."""
@@ -122,17 +181,17 @@ def check_game_clear(board):
 
 def reset_game():
     """Resets the game to its initial state based on the current difficulty."""
-    global GRID_WIDTH, GRID_HEIGHT, NUM_MINES, SCREEN_WIDTH, SCREEN_HEIGHT, screen, restart_button_rect
+    global GRID_WIDTH, GRID_HEIGHT, NUM_MINES, SCREEN_WIDTH, SCREEN_HEIGHT, screen
 
     GRID_WIDTH = DIFFICULTY_LEVELS[current_difficulty]["size"][0]
     GRID_HEIGHT = DIFFICULTY_LEVELS[current_difficulty]["size"][1]
     NUM_MINES = DIFFICULTY_LEVELS[current_difficulty]["mines"]
 
-    SCREEN_WIDTH = GRID_WIDTH * TILE_SIZE
-    SCREEN_HEIGHT = GRID_HEIGHT * TILE_SIZE + PANEL_HEIGHT
+    SCREEN_WIDTH = GRID_WIDTH * TILE_SIZE + 2 * PANEL_SIDES_WIDTH
+    SCREEN_HEIGHT = GRID_HEIGHT * TILE_SIZE + PANEL_TOP_HEIGHT + PANEL_BOTTOM_HEIGHT
     
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-    restart_button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 50, 10, 100, 40)
+    update_button_positions()
 
     board = create_board()
     first_click = True
@@ -150,13 +209,17 @@ def main():
     font = pygame.font.Font(None, 36)
     tile_font = pygame.font.Font(None, TILE_SIZE)
 
-    global SCREEN_WIDTH, SCREEN_HEIGHT, screen # Declare global variables here
+    global SCREEN_WIDTH, SCREEN_HEIGHT, screen, current_difficulty
+
+    # Set initial screen size for the main menu
+    SCREEN_WIDTH = 500
+    SCREEN_HEIGHT = 500
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+    update_button_positions()
 
     game_state = "main_menu"  # Possible states: main_menu, in_game
-    board, first_click, game_over, game_won, start_time = reset_game()
+    board, first_click, game_over, game_won, start_time = None, True, False, False, 0
     
-    restart_button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 50, 10, 100, 40)
-
     done = False
     clock = pygame.time.Clock()
 
@@ -168,37 +231,46 @@ def main():
                 SCREEN_WIDTH = event.w
                 SCREEN_HEIGHT = event.h
                 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-                restart_button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 50, 10, 100, 40)
+                update_button_positions()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 pos = pygame.mouse.get_pos()
 
                 if game_state == "main_menu":
-                    # Define buttons for click detection
-                    easy_button = pygame.Rect(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2, 150, 50)
-                    normal_button = pygame.Rect(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 60, 150, 50)
-                    hard_button = pygame.Rect(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 120, 150, 50)
+                    if event.button == 1:
+                        # Define buttons for click detection
+                        easy_button = pygame.Rect(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2, 150, 50)
+                        normal_button = pygame.Rect(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 60, 150, 50)
+                        hard_button = pygame.Rect(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 120, 150, 50)
 
-                    if easy_button.collidepoint(pos):
-                        current_difficulty = "Easy"
-                        game_state = "in_game"
-                        board, first_click, game_over, game_won, start_time = reset_game()
-                    elif normal_button.collidepoint(pos):
-                        current_difficulty = "Normal"
-                        game_state = "in_game"
-                        board, first_click, game_over, game_won, start_time = reset_game()
-                    elif hard_button.collidepoint(pos):
-                        current_difficulty = "Hard"
-                        game_state = "in_game"
-                        board, first_click, game_over, game_won, start_time = reset_game()
+                        if easy_button.collidepoint(pos):
+                            current_difficulty = "Easy"
+                            game_state = "in_game"
+                            board, first_click, game_over, game_won, start_time = reset_game()
+                        elif normal_button.collidepoint(pos):
+                            current_difficulty = "Normal"
+                            game_state = "in_game"
+                            board, first_click, game_over, game_won, start_time = reset_game()
+                        elif hard_button.collidepoint(pos):
+                            current_difficulty = "Hard"
+                            game_state = "in_game"
+                            board, first_click, game_over, game_won, start_time = reset_game()
 
                 elif game_state == "in_game":
-                    if restart_button_rect.collidepoint(pos):
-                        board, first_click, game_over, game_won, start_time = reset_game()
-                        continue
+                    if event.button == 1:
+                        if main_menu_button_rect.collidepoint(pos):
+                            game_state = "main_menu"
+                            SCREEN_WIDTH = 500
+                            SCREEN_HEIGHT = 500
+                            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+                            update_button_positions()
+                            continue
+                        if restart_button_rect.collidepoint(pos):
+                            board, first_click, game_over, game_won, start_time = reset_game()
+                            continue
 
                     if not game_over and not game_won:
-                        x = pos[0] // TILE_SIZE
-                        y = (pos[1] - PANEL_HEIGHT) // TILE_SIZE
+                        x = (pos[0] - PANEL_SIDES_WIDTH) // TILE_SIZE
+                        y = (pos[1] - PANEL_TOP_HEIGHT) // TILE_SIZE
 
                         if 0 <= y < GRID_HEIGHT:
                             if event.button == 1:  # Left click
@@ -255,11 +327,7 @@ def main():
             screen.fill(WHITE)
             
             mines_left = NUM_MINES - sum(tile['is_flagged'] for row in board for tile in row)
-            draw_panel(screen, font, elapsed_time, mines_left)
-            
-            pygame.draw.rect(screen, LIGHT_GRAY, restart_button_rect)
-            restart_text = font.render("Restart", True, BLACK)
-            screen.blit(restart_text, (restart_button_rect.x + 10, restart_button_rect.y + 5))
+            draw_ui_frame(screen, font, elapsed_time, mines_left)
 
             draw_board(screen, tile_font, board)
 
