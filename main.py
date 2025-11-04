@@ -209,6 +209,11 @@ def main():
     font = pygame.font.Font(None, 36)
     tile_font = pygame.font.Font(None, TILE_SIZE)
 
+    # Sound Initialization
+    pygame.mixer.init()
+    main_menu_sound = pygame.mixer.Sound('sound/VC-Minesweeper_MainMenu.mp3')
+    play_sound = pygame.mixer.Sound('sound/VC-Minesweeper_Play.mp3')
+
     global SCREEN_WIDTH, SCREEN_HEIGHT, screen, current_difficulty
 
     # Set initial screen size for the main menu
@@ -219,6 +224,8 @@ def main():
 
     game_state = "main_menu"  # Possible states: main_menu, in_game
     board, first_click, game_over, game_won, start_time = None, True, False, False, 0
+
+    main_menu_sound.play(-1)  # Start main menu music
     
     done = False
     clock = pygame.time.Clock()
@@ -245,20 +252,28 @@ def main():
                         if easy_button.collidepoint(pos):
                             current_difficulty = "Easy"
                             game_state = "in_game"
+                            main_menu_sound.stop()
+                            play_sound.play(-1)
                             board, first_click, game_over, game_won, start_time = reset_game()
                         elif normal_button.collidepoint(pos):
                             current_difficulty = "Normal"
                             game_state = "in_game"
+                            main_menu_sound.stop()
+                            play_sound.play(-1)
                             board, first_click, game_over, game_won, start_time = reset_game()
                         elif hard_button.collidepoint(pos):
                             current_difficulty = "Hard"
                             game_state = "in_game"
+                            main_menu_sound.stop()
+                            play_sound.play(-1)
                             board, first_click, game_over, game_won, start_time = reset_game()
 
                 elif game_state == "in_game":
                     if event.button == 1:
                         if main_menu_button_rect.collidepoint(pos):
                             game_state = "main_menu"
+                            play_sound.stop()
+                            main_menu_sound.play(-1)
                             SCREEN_WIDTH = 500
                             SCREEN_HEIGHT = 500
                             screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
@@ -343,6 +358,8 @@ def main():
         pygame.display.flip()
         clock.tick(60)
 
+    main_menu_sound.stop()
+    play_sound.stop()
     pygame.quit()
 
 if __name__ == "__main__":
